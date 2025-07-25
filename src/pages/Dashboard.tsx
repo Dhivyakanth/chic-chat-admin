@@ -150,15 +150,34 @@ const Dashboard = () => {
   };
 
   return (
-    <div className="min-h-screen bg-background flex">
-      {/* Sidebar */}
-      <div className="w-80 bg-card border-r border-border flex flex-col">
-        {/* Header */}
+    <div className="min-h-screen bg-background flex flex-col md:flex-row">
+      {/* Mobile Header */}
+      <div className="md:hidden p-4 border-b border-border bg-card flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <Sparkles className="h-5 w-5 text-primary" />
+          <h1 className="text-lg font-semibold">Sales Chatbot</h1>
+        </div>
+        <div className="flex items-center gap-2">
+          <ThemeToggle />
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={handleLogout}
+            className="text-muted-foreground hover:text-foreground"
+          >
+            <LogOut className="h-4 w-4" />
+          </Button>
+        </div>
+      </div>
+
+      {/* Sidebar - Hidden on mobile, shown on desktop */}
+      <div className="hidden md:flex w-80 bg-card border-r border-border flex-col">
+        {/* Desktop Header */}
         <div className="p-4 border-b border-border">
           <div className="flex items-center justify-between mb-4">
             <div className="flex items-center gap-2">
               <Sparkles className="h-6 w-6 text-primary" />
-              <h1 className="text-lg font-semibold">ChicChat Admin</h1>
+              <h1 className="text-lg font-semibold">Sales Chatbot</h1>
             </div>
             <div className="flex items-center gap-2">
               <ThemeToggle />
@@ -225,12 +244,62 @@ const Dashboard = () => {
         </ScrollArea>
       </div>
 
+      {/* Mobile New Chat Button */}
+      <div className="md:hidden p-4 border-b border-border bg-card">
+        <Button 
+          onClick={createNewChat}
+          className="w-full bg-gradient-primary hover:opacity-90 transition-smooth"
+        >
+          <Plus className="h-4 w-4 mr-2" />
+          New Chat
+        </Button>
+      </div>
+
+      {/* Mobile Chat List - Collapsible */}
+      {chats.length > 0 && (
+        <div className="md:hidden">
+          <ScrollArea className="max-h-32 border-b border-border bg-card">
+            <div className="p-2 space-y-1">
+              {chats.map((chat) => (
+                <div
+                  key={chat.id}
+                  className={`group p-2 rounded-lg cursor-pointer transition-smooth hover:bg-accent flex items-center justify-between ${
+                    currentChatId === chat.id ? "bg-accent" : ""
+                  }`}
+                  onClick={() => setCurrentChatId(chat.id)}
+                >
+                  <h3 className="text-sm font-medium truncate flex-1">
+                    {chat.title}
+                  </h3>
+                  <div className="flex items-center gap-1">
+                    <span className="text-xs text-muted-foreground">
+                      {chat.messages.length}
+                    </span>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-6 w-6 p-0"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        deleteChat(chat.id);
+                      }}
+                    >
+                      <Trash2 className="h-3 w-3" />
+                    </Button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </ScrollArea>
+        </div>
+      )}
+
       {/* Main Chat Area */}
-      <div className="flex-1 flex flex-col">
+      <div className="flex-1 flex flex-col min-h-0">
         {currentChat ? (
           <>
-            {/* Chat Header */}
-            <div className="p-4 border-b border-border bg-card/50">
+            {/* Chat Header - Hidden on mobile to save space */}
+            <div className="hidden md:block p-4 border-b border-border bg-card/50">
               <h2 className="text-lg font-semibold">{currentChat.title}</h2>
               <p className="text-sm text-muted-foreground">
                 Fashion Sales Assistant
@@ -238,13 +307,13 @@ const Dashboard = () => {
             </div>
 
             {/* Messages */}
-            <ScrollArea className="flex-1 p-4">
+            <ScrollArea className="flex-1 p-2 md:p-4">
               <div className="max-w-3xl mx-auto space-y-4">
                 {currentChat.messages.length === 0 && (
-                  <div className="text-center py-12">
-                    <Sparkles className="h-12 w-12 mx-auto mb-4 text-primary" />
-                    <h3 className="text-lg font-semibold mb-2">Start a conversation</h3>
-                    <p className="text-muted-foreground">
+                  <div className="text-center py-8 md:py-12">
+                    <Sparkles className="h-8 w-8 md:h-12 md:w-12 mx-auto mb-4 text-primary" />
+                    <h3 className="text-base md:text-lg font-semibold mb-2">Start a conversation</h3>
+                    <p className="text-sm md:text-base text-muted-foreground px-4">
                       Ask me anything about our dress collection!
                     </p>
                   </div>
@@ -256,13 +325,13 @@ const Dashboard = () => {
                     className={`flex ${message.role === "user" ? "justify-end" : "justify-start"}`}
                   >
                     <div
-                      className={`max-w-xs lg:max-w-md px-4 py-2 rounded-lg transition-smooth ${
+                      className={`max-w-[85%] md:max-w-xs lg:max-w-md px-3 py-2 md:px-4 md:py-2 rounded-lg transition-smooth ${
                         message.role === "user"
                           ? "bg-chat-bubble-user text-primary-foreground ml-auto"
                           : "bg-chat-bubble-assistant text-foreground"
                       }`}
                     >
-                      <p className="text-sm">{message.content}</p>
+                      <p className="text-sm leading-relaxed">{message.content}</p>
                       <p className="text-xs opacity-70 mt-1">
                         {message.timestamp.toLocaleTimeString()}
                       </p>
@@ -285,42 +354,43 @@ const Dashboard = () => {
             </ScrollArea>
 
             {/* Message Input */}
-            <div className="p-4 border-t border-border bg-card/50">
+            <div className="p-2 md:p-4 border-t border-border bg-card/50">
               <div className="max-w-3xl mx-auto flex gap-2">
                 <Input
                   value={newMessage}
                   onChange={(e) => setNewMessage(e.target.value)}
                   onKeyPress={handleKeyPress}
                   placeholder="Type your message..."
-                  className="flex-1 transition-smooth focus:ring-2 focus:ring-primary/20"
+                  className="flex-1 transition-smooth focus:ring-2 focus:ring-primary/20 text-sm md:text-base"
                   disabled={isTyping}
                 />
                 <Button
                   onClick={sendMessage}
                   disabled={!newMessage.trim() || isTyping}
-                  className="bg-gradient-primary hover:opacity-90 transition-smooth shadow-soft"
+                  className="bg-gradient-primary hover:opacity-90 transition-smooth shadow-soft h-10 w-10 md:h-auto md:w-auto md:px-4"
                 >
                   <Send className="h-4 w-4" />
+                  <span className="hidden md:inline ml-2">Send</span>
                 </Button>
               </div>
             </div>
           </>
         ) : (
           // Welcome Screen
-          <div className="flex-1 flex items-center justify-center">
+          <div className="flex-1 flex items-center justify-center p-4">
             <div className="text-center">
-              <div className="p-6 rounded-full bg-gradient-primary/10 w-24 h-24 mx-auto mb-6 flex items-center justify-center">
-                <Sparkles className="h-12 w-12 text-primary" />
+              <div className="p-4 md:p-6 rounded-full bg-gradient-primary/10 w-16 h-16 md:w-24 md:h-24 mx-auto mb-4 md:mb-6 flex items-center justify-center">
+                <Sparkles className="h-8 w-8 md:h-12 md:w-12 text-primary" />
               </div>
-              <h2 className="text-2xl font-bold mb-4 bg-gradient-primary bg-clip-text text-transparent">
-                Welcome to ChicChat Admin
+              <h2 className="text-xl md:text-2xl font-bold mb-4 bg-gradient-primary bg-clip-text text-transparent">
+                Welcome to Sales Chatbot
               </h2>
-              <p className="text-muted-foreground mb-6 max-w-md">
+              <p className="text-sm md:text-base text-muted-foreground mb-6 max-w-md mx-auto px-4">
                 Your intelligent fashion sales assistant. Create a new chat to start helping customers find their perfect dress.
               </p>
               <Button 
                 onClick={createNewChat}
-                className="bg-gradient-primary hover:opacity-90 transition-smooth shadow-soft"
+                className="bg-gradient-primary hover:opacity-90 transition-smooth shadow-soft w-full md:w-auto"
               >
                 <Plus className="h-4 w-4 mr-2" />
                 Start New Chat

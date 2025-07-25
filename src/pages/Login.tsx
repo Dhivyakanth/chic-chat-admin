@@ -22,10 +22,10 @@ const Login = () => {
     setTimeout(() => {
       if (credentials.id === "admin" && credentials.password === "admin123") {
         localStorage.setItem("isAuthenticated", "true");
-        toast({
-          title: "Welcome back!",
-          description: "Successfully logged into ChicChat Admin",
-        });
+            toast({
+              title: "Welcome back!",
+              description: "Successfully logged into Sales Chatbot",
+            });
         navigate("/dashboard");
       } else {
         toast({
@@ -51,7 +51,7 @@ const Login = () => {
           </div>
           <div>
             <CardTitle className="text-2xl font-bold bg-gradient-primary bg-clip-text text-transparent">
-              ChicChat Admin
+              Sales Chatbot
             </CardTitle>
             <CardDescription className="text-muted-foreground mt-2">
               Fashion Sales Assistant Portal
