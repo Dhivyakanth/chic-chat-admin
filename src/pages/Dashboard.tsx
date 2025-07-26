@@ -12,32 +12,47 @@ import {
   MessageCircle, 
   Plus,
   Trash2,
-  Settings
+  AlertCircle,
+  Wifi,
+  WifiOff
 } from "lucide-react";
-
-interface Message {
-  id: string;
-  content: string;
-  role: "user" | "assistant";
-  timestamp: Date;
-}
-
-interface Chat {
-  id: string;
-  title: string;
-  messages: Message[];
-  lastUpdated: Date;
-}
+import { chatbotApi, checkBackendConnection, type Chat as ApiChat, type Message as ApiMessage } from "@/lib/chatbot-api";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 
 const Dashboard = () => {
-  const [chats, setChats] = useState<Chat[]>([]);
+  const [chats, setChats] = useState<ApiChat[]>([]);
   const [currentChatId, setCurrentChatId] = useState<string | null>(null);
   const [newMessage, setNewMessage] = useState("");
   const [isTyping, setIsTyping] = useState(false);
+  const [isBackendConnected, setIsBackendConnected] = useState(false);
+  const [isCheckingConnection, setIsCheckingConnection] = useState(true);
   const navigate = useNavigate();
   const { toast } = useToast();
 
   const currentChat = chats.find(chat => chat.id === currentChatId);
+
+  // Check backend connection on component mount
+  useEffect(() => {
+    const checkConnection = async () => {
+      setIsCheckingConnection(true);
+      const connected = await checkBackendConnection();
+      setIsBackendConnected(connected);
+      setIsCheckingConnection(false);
+      
+      if (!connected) {
+        toast({
+          title: "Backend Connection Failed",
+          description: "Please make sure the Python backend server is running on port 8000",
+          variant: "destructive",
+        });
+      } else {
+        // Load existing chats if connected
+        loadChats();
+      }
+    };
+    
+    checkConnection();
+  }, [toast]);
 
   useEffect(() => {
     const isAuthenticated = localStorage.getItem("isAuthenticated");
@@ -45,6 +60,17 @@ const Dashboard = () => {
       navigate("/");
     }
   }, [navigate]);
+
+  const loadChats = async () => {
+    try {
+      const response = await chatbotApi.getAllChats();
+      if (response.success && response.data) {
+        setChats(response.data);
+      }
+    } catch (error) {
+      console.error("Failed to load chats:", error);
+    }
+  };
 
   const handleLogout = () => {
     localStorage.removeItem("isAuthenticated");
@@ -55,107 +81,144 @@ const Dashboard = () => {
     navigate("/");
   };
 
-  const createNewChat = () => {
-    const newChat: Chat = {
-      id: Date.now().toString(),
-      title: "New Chat",
-      messages: [],
-      lastUpdated: new Date()
-    };
-    setChats(prev => [newChat, ...prev]);
-    setCurrentChatId(newChat.id);
+  const createNewChat = async () => {
+    if (!isBackendConnected) {
+      toast({
+        title: "Backend Not Connected",
+        description: "Please check your backend connection",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    try {
+      const response = await chatbotApi.createNewChat();
+      if (response.success && response.data) {
+        setChats(prev => [response.data!, ...prev]);
+        setCurrentChatId(response.data!.id);
+        toast({
+          title: "New Chat Created",
+          description: "You can start asking questions about sales data!",
+        });
+      } else {
+        throw new Error(response.error || "Failed to create chat");
+      }
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: error instanceof Error ? error.message : "Failed to create new chat",
+        variant: "destructive",
+      });
+    }
   };
 
-  const deleteChat = (chatId: string) => {
-    setChats(prev => prev.filter(chat => chat.id !== chatId));
-    if (currentChatId === chatId) {
-      setCurrentChatId(null);
+  const deleteChat = async (chatId: string) => {
+    try {
+      const response = await chatbotApi.deleteChat(chatId);
+      if (response.success) {
+        setChats(prev => prev.filter(chat => chat.id !== chatId));
+        if (currentChatId === chatId) {
+          setCurrentChatId(null);
+        }
+        toast({
+          title: "Chat Deleted",
+          description: "Chat has been successfully deleted",
+        });
+      } else {
+        throw new Error(response.error || "Failed to delete chat");
+      }
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: error instanceof Error ? error.message : "Failed to delete chat",
+        variant: "destructive",
+      });
     }
   };
 
   const sendMessage = async () => {
-    if (!newMessage.trim() || !currentChatId) return;
+    if (!newMessage.trim() || !currentChatId || !isBackendConnected) return;
 
-    const userMessage: Message = {
-      id: Date.now().toString(),
-      content: newMessage.trim(),
-      role: "user",
-      timestamp: new Date()
-    };
-
-    // Add user message
-    setChats(prev => prev.map(chat => 
-      chat.id === currentChatId 
-        ? { 
-            ...chat, 
-            messages: [...chat.messages, userMessage],
-            title: chat.messages.length === 0 ? newMessage.slice(0, 30) + "..." : chat.title,
-            lastUpdated: new Date()
-          }
-        : chat
-    ));
-
+    const messageText = newMessage.trim();
     setNewMessage("");
     setIsTyping(true);
 
-    // Simulate AI response
-    setTimeout(() => {
-      const aiResponse: Message = {
-        id: (Date.now() + 1).toString(),
-        content: generateAIResponse(newMessage),
-        role: "assistant",
-        timestamp: new Date()
-      };
-
-      setChats(prev => prev.map(chat => 
-        chat.id === currentChatId 
-          ? { 
-              ...chat, 
-              messages: [...chat.messages, aiResponse],
-              lastUpdated: new Date()
-            }
-          : chat
-      ));
+    try {
+      const response = await chatbotApi.sendMessage(currentChatId, messageText);
+      
+      if (response.success && response.data) {
+        // Update the chat with new messages
+        setChats(prev => prev.map(chat => 
+          chat.id === currentChatId ? response.data!.chat : chat
+        ));
+        
+        toast({
+          title: "Response Generated",
+          description: "Your sales data analysis is ready!",
+        });
+      } else {
+        throw new Error(response.error || "Failed to send message");
+      }
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: error instanceof Error ? error.message : "Failed to send message",
+        variant: "destructive",
+      });
+      
+      // Re-add the message to input if it failed
+      setNewMessage(messageText);
+    } finally {
       setIsTyping(false);
-    }, 1500);
+    }
   };
 
-  const generateAIResponse = (userInput: string): string => {
-    const lowerInput = userInput.toLowerCase();
-    
-    if (lowerInput.includes("dress") || lowerInput.includes("clothing")) {
-      return "I'd be happy to help you with our dress collection! We have a wide range of styles from casual to formal wear. What type of dress are you looking for? Evening wear, casual, business attire, or something for a special occasion?";
-    }
-    
-    if (lowerInput.includes("size") || lowerInput.includes("fit")) {
-      return "For sizing, we offer sizes XS to 3XL for most of our dresses. I recommend checking our size guide for accurate measurements. Would you like me to help you find the perfect fit for a specific style?";
-    }
-    
-    if (lowerInput.includes("price") || lowerInput.includes("cost")) {
-      return "Our dress prices range from $49 for casual styles to $299 for premium evening wear. We frequently have sales and promotions. Would you like to know about current deals or a specific price range?";
-    }
-    
-    if (lowerInput.includes("return") || lowerInput.includes("exchange")) {
-      return "We offer a 30-day return policy for unworn items with tags attached. Exchanges are free within this period. Refunds are processed within 5-7 business days. Do you need help with a specific return?";
-    }
-    
-    return "Thank you for your inquiry! As your fashion sales assistant, I'm here to help you find the perfect dress from our collection. Feel free to ask about styles, sizes, prices, or any other questions about our products.";
-  };
-
-  const handleKeyPress = (e: React.KeyboardEvent) => {
+  const handleKeyPress = (e: any) => {
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
       sendMessage();
     }
   };
 
+  const formatTimestamp = (timestamp: string) => {
+    return new Date(timestamp).toLocaleTimeString();
+  };
+
+  if (isCheckingConnection) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <div className="text-center">
+          <Sparkles className="h-8 w-8 mx-auto mb-4 text-primary animate-pulse" />
+          <p className="text-muted-foreground">Connecting to backend...</p>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-background flex flex-col md:flex-row">
+      {/* Backend Connection Status */}
+      {!isBackendConnected && (
+        <div className="p-4 bg-destructive/10 border-b border-destructive/20">
+          <Alert className="border-destructive/20 bg-destructive/10">
+            <WifiOff className="h-4 w-4" />
+            <AlertDescription>
+              Backend server not connected. Please run: <code className="font-mono">python flask_server.py</code>
+            </AlertDescription>
+          </Alert>
+        </div>
+      )}
+
       {/* Mobile Header */}
       <div className="md:hidden p-4 border-b border-border bg-card flex items-center justify-between">
         <div className="flex items-center gap-2">
           <Sparkles className="h-5 w-5 text-primary" />
           <h1 className="text-lg font-semibold">Sales Chatbot</h1>
+          {isBackendConnected ? (
+            <Wifi className="h-4 w-4 text-green-500" />
+          ) : (
+            <WifiOff className="h-4 w-4 text-red-500" />
+          )}
         </div>
         <div className="flex items-center gap-2">
           <ThemeToggle />
@@ -178,6 +241,11 @@ const Dashboard = () => {
             <div className="flex items-center gap-2">
               <Sparkles className="h-6 w-6 text-primary" />
               <h1 className="text-lg font-semibold">Sales Chatbot</h1>
+              {isBackendConnected ? (
+                <Wifi className="h-4 w-4 text-green-500" />
+              ) : (
+                <WifiOff className="h-4 w-4 text-red-500" />
+              )}
             </div>
             <div className="flex items-center gap-2">
               <ThemeToggle />
@@ -194,6 +262,7 @@ const Dashboard = () => {
           
           <Button 
             onClick={createNewChat}
+            disabled={!isBackendConnected}
             className="w-full bg-gradient-primary hover:opacity-90 transition-smooth"
           >
             <Plus className="h-4 w-4 mr-2" />
@@ -248,6 +317,7 @@ const Dashboard = () => {
       <div className="md:hidden p-4 border-b border-border bg-card">
         <Button 
           onClick={createNewChat}
+          disabled={!isBackendConnected}
           className="w-full bg-gradient-primary hover:opacity-90 transition-smooth"
         >
           <Plus className="h-4 w-4 mr-2" />
@@ -302,7 +372,7 @@ const Dashboard = () => {
             <div className="hidden md:block p-4 border-b border-border bg-card/50">
               <h2 className="text-lg font-semibold">{currentChat.title}</h2>
               <p className="text-sm text-muted-foreground">
-                Fashion Sales Assistant
+                AI-Powered Sales Data Analytics
               </p>
             </div>
 
@@ -312,9 +382,9 @@ const Dashboard = () => {
                 {currentChat.messages.length === 0 && (
                   <div className="text-center py-8 md:py-12">
                     <Sparkles className="h-8 w-8 md:h-12 md:w-12 mx-auto mb-4 text-primary" />
-                    <h3 className="text-base md:text-lg font-semibold mb-2">Start a conversation</h3>
+                    <h3 className="text-base md:text-lg font-semibold mb-2">Start analyzing your sales data</h3>
                     <p className="text-sm md:text-base text-muted-foreground px-4">
-                      Ask me anything about our dress collection!
+                      Ask me about sales trends, predictions, customer insights, and more!
                     </p>
                   </div>
                 )}
@@ -331,9 +401,11 @@ const Dashboard = () => {
                           : "bg-chat-bubble-assistant text-foreground"
                       }`}
                     >
-                      <p className="text-sm leading-relaxed">{message.content}</p>
+                      <div className="text-sm leading-relaxed whitespace-pre-wrap">
+                        {message.content}
+                      </div>
                       <p className="text-xs opacity-70 mt-1">
-                        {message.timestamp.toLocaleTimeString()}
+                        {formatTimestamp(message.timestamp)}
                       </p>
                     </div>
                   </div>
@@ -360,13 +432,13 @@ const Dashboard = () => {
                   value={newMessage}
                   onChange={(e) => setNewMessage(e.target.value)}
                   onKeyPress={handleKeyPress}
-                  placeholder="Type your message..."
+                  placeholder={isBackendConnected ? "Ask about sales data, trends, predictions..." : "Backend not connected"}
                   className="flex-1 transition-smooth focus:ring-2 focus:ring-primary/20 text-sm md:text-base"
-                  disabled={isTyping}
+                  disabled={isTyping || !isBackendConnected}
                 />
                 <Button
                   onClick={sendMessage}
-                  disabled={!newMessage.trim() || isTyping}
+                  disabled={!newMessage.trim() || isTyping || !isBackendConnected}
                   className="bg-gradient-primary hover:opacity-90 transition-smooth shadow-soft h-10 w-10 md:h-auto md:w-auto md:px-4"
                 >
                   <Send className="h-4 w-4" />
@@ -383,18 +455,27 @@ const Dashboard = () => {
                 <Sparkles className="h-8 w-8 md:h-12 md:w-12 text-primary" />
               </div>
               <h2 className="text-xl md:text-2xl font-bold mb-4 bg-gradient-primary bg-clip-text text-transparent">
-                Welcome to Sales Chatbot
+                Welcome to Sales Analytics AI
               </h2>
               <p className="text-sm md:text-base text-muted-foreground mb-6 max-w-md mx-auto px-4">
-                Your intelligent fashion sales assistant. Create a new chat to start helping customers find their perfect dress.
+                Your intelligent sales data analysis assistant. Create a new chat to start exploring your fashion sales insights, trends, and predictions.
               </p>
-              <Button 
-                onClick={createNewChat}
-                className="bg-gradient-primary hover:opacity-90 transition-smooth shadow-soft w-full md:w-auto"
-              >
-                <Plus className="h-4 w-4 mr-2" />
-                Start New Chat
-              </Button>
+              {isBackendConnected ? (
+                <Button 
+                  onClick={createNewChat}
+                  className="bg-gradient-primary hover:opacity-90 transition-smooth shadow-soft w-full md:w-auto"
+                >
+                  <Plus className="h-4 w-4 mr-2" />
+                  Start New Analysis
+                </Button>
+              ) : (
+                <Alert className="max-w-md mx-auto">
+                  <AlertCircle className="h-4 w-4" />
+                  <AlertDescription>
+                    Please start the backend server to begin analysis
+                  </AlertDescription>
+                </Alert>
+              )}
             </div>
           </div>
         )}
